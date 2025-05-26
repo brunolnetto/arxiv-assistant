@@ -2,9 +2,9 @@ from os import getenv
 from langchain_core.tools import tool
 from openai import OpenAI
 
-from models import ResearchContext, PaperEvaluation, Paper
-from agents import topic_research_agent
-from utils import (
+from src.models import ResearchContext, PaperEvaluation, Paper
+from src.agents import topic_research_agent
+from src.utils import (
     get_embedding, 
     from_scale_to_scale, 
     retrieve_arxiv_papers, 

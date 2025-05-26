@@ -5,7 +5,7 @@ from numpy.linalg import norm
 from numpy import dot
 from openai import OpenAI
 
-from models import PaperEvaluation, Paper, ResearchContext
+from src.models import PaperEvaluation, Paper, ResearchContext
 
 client = OpenAI()
 
