@@ -57,12 +57,7 @@ def handle_exception(e, verbose=False):
         console.print(Panel(msg, title="[bold red]Error[/bold red]", style="red"))
 
 def print_node_state(node_name: str, message: any, max_length: int = 2000) -> None:
-    """Nicely prints different message types with spinner and thinking effect."""
-
-    spinner = Spinner("dots", text=f"{node_name} is thinking...")
-    with Live(spinner, refresh_per_second=12, console=console):
-        time.sleep(0.8)  # Simulate "thinking"
-    
+    """Nicely prints different message types with spinner and thinking effect."""    
     try:
         if hasattr(message, "content"):
             content = message.content
