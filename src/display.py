@@ -68,10 +68,6 @@ def stream_graph_updates(graph, user_input: str, config: dict = {}):
             
             for event in graph.stream(inputs, config=config):
                 for value in event.values():
-                    # detect a “human assistance” tool call
-                    if isinstance(value, ToolMessage) and value.tool_name == "human_assistance":
-                        break
-
                     # This assumes message content comes as incremental string chunks
                     message = value.get("messages", [])[-1]
                     if not message:

@@ -28,3 +28,6 @@ graph_builder.add_edge("chatbot", END)
 # ---- 5. Build Graph & Agent ----
 memory=MemorySaver()
 graph = graph_builder.compile(checkpointer=memory)
+
+print(arxiv_research_tool.name)
+print(arxiv_research_tool.description)

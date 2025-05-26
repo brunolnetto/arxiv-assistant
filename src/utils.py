@@ -1,3 +1,4 @@
+from os import getenv
 from typing import List 
 from functools import lru_cache
 
@@ -8,6 +9,7 @@ from openai import OpenAI
 from src.models import PaperEvaluation, Paper, ResearchContext
 
 client = OpenAI()
+LLM_MODEL_NAME=getenv('LLM_MODEL_NAME', 'gpt-40-mini')
 
 @lru_cache(maxsize=128)
 def get_embedding(text: str, model: str):
