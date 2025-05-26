@@ -6,8 +6,11 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "arxiv>=2.2.0",
+    "grandalf>=0.8",
+    "ipython>=8.36.0",
     "langchain>=0.3.25",
     "langchain-openai>=0.3.18",
+    "langdetect>=1.0.9",
     "langgraph>=0.4.7",
     "numpy>=2.2.6",
     "pydantic",
