@@ -1,26 +1,64 @@
 from os import getenv
-from typing import List 
+from typing import List, Union, Optional
 from functools import lru_cache
+from langdetect import detect, DetectorFactory
 
 from numpy.linalg import norm
 from numpy import dot
 from openai import OpenAI
+from langchain_core.messages import HumanMessage, AIMessage
 
-from src.models import PaperEvaluation, Paper, ResearchContext
+from src.models import PaperEvaluation, Paper, ResearchContext, TranslationInput
 
 client = OpenAI()
 LLM_MODEL_NAME=getenv('LLM_MODEL_NAME', 'gpt-40-mini')
+LLM_EMBED_MODEL_NAME=getenv('LLM_EMBED_MODEL_NAME', 'text-embedding-3-small')
 
 @lru_cache(maxsize=128)
 def get_embedding(text: str, model: str):
     """Fetch and cache text embeddings."""
     return client.embeddings.create(input=text, model=model).data[0].embedding
 
-def get_last_human_message(ctx: ResearchContext) -> str:
-    return [msg for msg in ctx.messages if msg.get("role") == "user"][-1]["content"]
+def get_last_entity_message(ctx: ResearchContext, entity: Union[HumanMessage, AIMessage]) -> str:
+    entity_messages = [msg for msg in ctx["messages"] if isinstance(msg, entity)]
+    
+    if not entity_messages:
+        raise ValueError(f"No {entity.__name__} found in context.")
+    
+    return entity_messages[-1].content
 
-def cossine_distance(l_vec: str, r_vec: str):
+def get_last_human_message(ctx: ResearchContext) -> str:
+    return get_last_entity_message(ctx, HumanMessage)
+
+def get_last_ai_message(ctx: ResearchContext) -> str:
+    return get_last_entity_message(ctx, AIMessage)
+
+def cosine_distance(l_vec: str, r_vec: str):
     return dot(l_vec, r_vec) / (norm(l_vec) * norm(r_vec))
+
+def prepare_translation_input(
+    text: str, 
+    preferred_lang: Optional[str] = None, 
+    force_direction="auto"
+) -> TranslationInput:
+    DetectorFactory.seed = 0
+    detected = detect(text)  # e.g. 'en', 'pt', etc.
+    
+    # Optionally: short-circuit dumb translations
+    if force_direction == "auto":
+        if detected == "en":
+            direction = "from_en"
+        else:
+            direction = "to_en"
+    else:
+        direction = force_direction
+
+    return TranslationInput(
+        text=text,
+        preferred_lang=preferred_lang,
+        force_direction=direction
+    )
+
 
 def from_scale_to_scale(value: float, l_scale: list[int], r_scale: list[int]) -> float:
     """
@@ -60,7 +98,6 @@ def retrieve_arxiv_papers(topic: str, max_results: int=5) -> List[Paper]:
 
     search = arxiv.Search(query=f'all:"{topic}"', max_results=max_results)
     client_arxiv = arxiv.Client()
-    papers = []
 
     return list(map(
         lambda r: Paper(
@@ -73,8 +110,8 @@ def retrieve_arxiv_papers(topic: str, max_results: int=5) -> List[Paper]:
     ))
 
 def get_scaled_similarity(l_query: str, r_query: str) -> float: 
-    q_emb, d_emb = get_embedding(l_query), get_embedding(r_query)
-    similarity = cossine_distance(q_emb, d_emb)
+    q_emb, d_emb = get_embedding(l_query, LLM_EMBED_MODEL_NAME), get_embedding(r_query, LLM_EMBED_MODEL_NAME)
+    similarity = cosine_distance(q_emb, d_emb)
     return from_scale_to_scale(similarity, [-1, 1], [0, 1])
 
 def explain_paper_relevance(query: str, paper: Paper) -> PaperEvaluation:
@@ -101,4 +138,6 @@ def explain_paper_relevance(query: str, paper: Paper) -> PaperEvaluation:
     completion = client.chat.completions.create(model=LLM_MODEL_NAME, messages=messages)
     rationale = completion.choices[0].message.content.strip()
 
-    return PaperEvaluation(topic=paper.topic, score=scaled_similarity, rationale=rationale)
+    eval_model=PaperEvaluation(topic=paper.topic, score=scaled_similarity, rationale=rationale)
+    
+    return eval_model

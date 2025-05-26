@@ -1,33 +1,54 @@
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.prebuilt import ToolNode, tools_condition
+from langchain_core.messages import ToolMessage
+from langgraph.graph import MessagesState
+from typing import Literal
 
-from src.models import ResearchContext
-from src.agents import chat_llm
-from src.tools import arxiv_research_tool
+from src.agents import chatbot_node, research_tools_by_name
 
-def chatbot(ctx: ResearchContext):
-    messages=ctx["messages"]
-    message=chat_llm.invoke(messages)
-    return {"messages": [message]}
+def should_research(state: MessagesState) -> Literal["research_pool", END]:
+    """
+    Determines if the last message is related to research and should invoke the research pool.
+    If the last message contains tool calls, it indicates a research-related query.
+    If not, it returns END to stop the workflow.
+    """
+    last_message = state["messages"][-1]
+    if last_message.tool_calls:
+        return 'research_pool'
 
-graph_builder = StateGraph(ResearchContext)
+    return END
 
-tools_node = ToolNode([ arxiv_research_tool ])
+def research_pool_node(state: dict):
+    """Performs the tool call"""
+    result = []
+    for tool_call in state["messages"][-1].tool_calls:
+        tool = research_tools_by_name[tool_call["name"]]
+        observation = tool.invoke(tool_call["args"])
+        tool_message = ToolMessage(content=observation, tool_call_id=tool_call["id"])
 
-# Add nodes
-graph_builder.add_node("chatbot", chatbot)
-graph_builder.add_node("tools", tools_node)
+        result.append(tool_message)
 
-# Define edges
-graph_builder.add_edge(START, "chatbot")
-graph_builder.add_conditional_edges("chatbot", tools_condition)
-graph_builder.add_edge("tools", "chatbot")
-graph_builder.add_edge("chatbot", END)
+    return {"messages": result}
 
-# ---- 5. Build Graph & Agent ----
-memory=MemorySaver()
-graph = graph_builder.compile(checkpointer=memory)
+def build_research_graph():
+    """
+    Build the research graph for interacting with the chatbot and tools.
+    This function sets up the nodes and edges of the graph, defining how the chatbot interacts with the tools.
+    """
+    g = StateGraph(MessagesState)
 
-print(arxiv_research_tool.name)
-print(arxiv_research_tool.description)
+    # Start node
+    g.add_edge(START, "chatbot")
+
+    # Nodes
+    g.add_node("chatbot", chatbot_node)
+    g.add_node("research_pool",  research_pool_node)
+
+    # Conditional: if not research-related → END, else → chatbot
+    g.add_conditional_edges("chatbot", should_research)
+
+    # After tools
+    g.add_edge("research_pool", "chatbot")
+
+    memory=MemorySaver()
+    return g.compile(checkpointer=memory)
